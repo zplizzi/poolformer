@@ -54,11 +54,7 @@ try:
 except AttributeError:
     pass
 
-try:
-    import wandb
-    has_wandb = True
-except ImportError: 
-    has_wandb = False
+import wandb
 
 torch.backends.cudnn.benchmark = True
 _logger = logging.getLogger('train')
@@ -302,6 +298,8 @@ parser.add_argument('--torchscript', dest='torchscript', action='store_true',
 parser.add_argument('--log-wandb', action='store_true', default=False,
                     help='log training and validation metrics to wandb')
 
+parser.add_argument('--validate_every', type=int, default=5,)
+
 
 def _parse_args():
     # Do we have a config file to parse?
@@ -324,13 +322,6 @@ def main():
     setup_default_logging()
     args, args_text = _parse_args()
     
-    if args.log_wandb:
-        if has_wandb:
-            wandb.init(project="zack_metaformer", config=args)
-        else: 
-            _logger.warning("You've requested to log metrics to wandb but package not found. "
-                            "Metrics not being logged to wandb, try `pip install wandb`")
-             
     args.prefetcher = not args.no_prefetcher
     args.distributed = False
     if 'WORLD_SIZE' in os.environ:
@@ -349,6 +340,9 @@ def main():
     else:
         _logger.info('Training with a single process on 1 GPUs.')
     assert args.rank >= 0
+
+    if args.rank == 0:
+        wandb.init(project="zack_metaformer", config=args)
 
     # resolve AMP arguments based on PyTorch / Apex availability
     use_amp = None
@@ -629,28 +623,24 @@ def main():
                     _logger.info("Distributing BatchNorm running means and vars")
                 distribute_bn(model, args.world_size, args.dist_bn == 'reduce')
 
-            eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
-
-            # if model_ema is not None and not args.model_ema_force_cpu:
-            #     if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
-            #         distribute_bn(model_ema, args.world_size, args.dist_bn == 'reduce')
-            #     ema_eval_metrics = validate(
-            #         model_ema.module, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast, log_suffix=' (EMA)')
-            #     eval_metrics = ema_eval_metrics
-
             if lr_scheduler is not None:
                 # step LR for next epoch
-                lr_scheduler.step(epoch + 1, eval_metrics[eval_metric])
+                # lr_scheduler.step(epoch + 1, eval_metrics[eval_metric])
+                # This will only work for cosine annealing!
+                lr_scheduler.step(epoch + 1, 0.0)
 
-            if output_dir is not None:
-                update_summary(
-                    epoch, train_metrics, eval_metrics, os.path.join(output_dir, 'summary.csv'),
-                    write_header=best_metric is None, log_wandb=args.log_wandb and has_wandb)
+            if epoch % args.validate_every == 0:
+                eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
 
-            if saver is not None:
-                # save proper checkpoint with eval metric
-                save_metric = eval_metrics[eval_metric]
-                best_metric, best_epoch = saver.save_checkpoint(epoch, metric=save_metric)
+                if output_dir is not None:
+                    update_summary(
+                        epoch, train_metrics, eval_metrics, os.path.join(output_dir, 'summary.csv'),
+                        write_header=best_metric is None, log_wandb=args.log_wandb and args.rank == 0)
+
+                if saver is not None:
+                    # save proper checkpoint with eval metric
+                    save_metric = eval_metrics[eval_metric]
+                    best_metric, best_epoch = saver.save_checkpoint(epoch, metric=save_metric)
 
     except KeyboardInterrupt:
         pass
