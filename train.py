@@ -326,7 +326,7 @@ def main():
     
     if args.log_wandb:
         if has_wandb:
-            wandb.init(project=args.experiment, config=args)
+            wandb.init(project="zack_metaformer", config=args)
         else: 
             _logger.warning("You've requested to log metrics to wandb but package not found. "
                             "Metrics not being logged to wandb, try `pip install wandb`")
@@ -494,13 +494,13 @@ def main():
     dataset_train = create_dataset(
         args.dataset, root=args.data_dir, split=args.train_split, is_training=True,
         class_map=args.class_map,
-        download=args.dataset_download,
+        # download=args.dataset_download,
         batch_size=args.batch_size,
         repeats=args.epoch_repeats)
     dataset_eval = create_dataset(
         args.dataset, root=args.data_dir, split=args.val_split, is_training=False,
         class_map=args.class_map,
-        download=args.dataset_download,
+        # download=args.dataset_download,
         batch_size=args.batch_size)
 
     # setup mixup / cutmix
@@ -631,12 +631,12 @@ def main():
 
             eval_metrics = validate(model, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast)
 
-            if model_ema is not None and not args.model_ema_force_cpu:
-                if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
-                    distribute_bn(model_ema, args.world_size, args.dist_bn == 'reduce')
-                ema_eval_metrics = validate(
-                    model_ema.module, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast, log_suffix=' (EMA)')
-                eval_metrics = ema_eval_metrics
+            # if model_ema is not None and not args.model_ema_force_cpu:
+            #     if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
+            #         distribute_bn(model_ema, args.world_size, args.dist_bn == 'reduce')
+            #     ema_eval_metrics = validate(
+            #         model_ema.module, loader_eval, validate_loss_fn, args, amp_autocast=amp_autocast, log_suffix=' (EMA)')
+            #     eval_metrics = ema_eval_metrics
 
             if lr_scheduler is not None:
                 # step LR for next epoch
