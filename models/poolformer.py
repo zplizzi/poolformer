@@ -56,6 +56,7 @@ def _cfg(url='', **kwargs):
 
 
 default_cfgs = {
+    'poolformer_s_64': _cfg(crop_pct=0.9, input_size=(3, 64, 64)),
     'poolformer_s': _cfg(crop_pct=0.9),
     'poolformer_m': _cfg(crop_pct=0.95),
 }
@@ -409,6 +410,64 @@ class PoolFormer(nn.Module):
         # for image classification
         return cls_out
 
+@register_model
+def poolformer_z1(pretrained=False, **kwargs):
+    """
+    --layers: [x,x,x,x], numbers of layers for the four stages
+    --embed_dims, --mlp_ratios:
+        embedding dims and mlp ratios for the four stages
+    --downsamples: flags to apply downsampling or not in four blocks
+    """
+    # 14M params
+    layers = [12]
+    embed_dims = [384]
+    mlp_ratios = [4]
+    downsamples = [False]
+    model = PoolFormer(
+        layers, embed_dims=embed_dims,
+        mlp_ratios=mlp_ratios, downsamples=downsamples, in_patch_size=4, in_stride=4, in_padding=2,
+        **kwargs)
+    model.default_cfg = default_cfgs['poolformer_s_64']
+    return model
+
+@register_model
+def poolformer_s12_64(pretrained=False, **kwargs):
+    """
+    --layers: [x,x,x,x], numbers of layers for the four stages
+    --embed_dims, --mlp_ratios:
+        embedding dims and mlp ratios for the four stages
+    --downsamples: flags to apply downsampling or not in four blocks
+    """
+    layers = [2, 2, 6, 2]
+    embed_dims = [64, 128, 320, 512]
+    mlp_ratios = [4, 4, 4, 4]
+    # The last one here i believe is not applied, as it's after the last block.
+    downsamples = [False, True, True, True]
+    model = PoolFormer(
+        layers, embed_dims=embed_dims,
+        mlp_ratios=mlp_ratios, downsamples=downsamples, in_patch_size=4, in_stride=2, in_padding=2,
+        **kwargs)
+    model.default_cfg = default_cfgs['poolformer_s_64']
+    return model
+
+@register_model
+def poolformer_s24_64(pretrained=False, **kwargs):
+    """
+    --layers: [x,x,x,x], numbers of layers for the four stages
+    --embed_dims, --mlp_ratios:
+        embedding dims and mlp ratios for the four stages
+    --downsamples: flags to apply downsampling or not in four blocks
+    """
+    layers = [4, 4, 12, 4]
+    embed_dims = [64, 128, 320, 512]
+    mlp_ratios = [4, 4, 4, 4]
+    downsamples = [False, False, True, True]
+    model = PoolFormer(
+        layers, embed_dims=embed_dims,
+        mlp_ratios=mlp_ratios, downsamples=downsamples,
+        **kwargs)
+    model.default_cfg = default_cfgs['poolformer_s_64']
+    return model
 
 @register_model
 def poolformer_s12(pretrained=False, **kwargs):

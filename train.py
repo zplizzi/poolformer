@@ -39,6 +39,10 @@ from timm.utils import ApexScaler, NativeScaler
 
 import models
 
+import torchvision
+torchvision.set_image_backend('accimage')
+
+
 try:
     from apex import amp
     from apex.parallel import DistributedDataParallel as ApexDDP
@@ -520,6 +524,9 @@ def main():
     train_interpolation = args.train_interpolation
     if args.no_aug or not train_interpolation:
         train_interpolation = data_config['interpolation']
+
+    if args.rank == 0:
+        print(data_config["input_size"])
     loader_train = create_loader(
         dataset_train,
         input_size=data_config['input_size'],
@@ -610,6 +617,8 @@ def main():
 
     try:
         for epoch in range(start_epoch, num_epochs):
+            if args.rank == 0:
+                print(f"{time.time()}: epoch starting")
             if args.distributed and hasattr(loader_train.sampler, 'set_epoch'):
                 loader_train.sampler.set_epoch(epoch)
 
@@ -618,10 +627,14 @@ def main():
                 lr_scheduler=lr_scheduler, saver=saver, output_dir=output_dir,
                 amp_autocast=amp_autocast, loss_scaler=loss_scaler, model_ema=model_ema, mixup_fn=mixup_fn)
 
+            if args.rank == 0:
+                print(f"{time.time()}: finished training epoch")
             if args.distributed and args.dist_bn in ('broadcast', 'reduce'):
                 if args.local_rank == 0:
                     _logger.info("Distributing BatchNorm running means and vars")
                 distribute_bn(model, args.world_size, args.dist_bn == 'reduce')
+            if args.rank == 0:
+                print(f"{time.time()}: finished distributing")
 
             if lr_scheduler is not None:
                 # step LR for next epoch
@@ -641,6 +654,9 @@ def main():
                     # save proper checkpoint with eval metric
                     save_metric = eval_metrics[eval_metric]
                     best_metric, best_epoch = saver.save_checkpoint(epoch, metric=save_metric)
+
+            if args.rank == 0:
+                print(f"{time.time()}: finished epoch")
 
     except KeyboardInterrupt:
         pass
@@ -669,7 +685,11 @@ def train_one_epoch(
     end = time.time()
     last_idx = len(loader) - 1
     num_updates = epoch * len(loader)
+    if args.rank == 0:
+        print(f"{time.time()}: starting train batches")
     for batch_idx, (input, target) in enumerate(loader):
+        # if args.rank == 0:
+        #     print(f"{time.time()}: starting batch", flush=True)
         last_batch = batch_idx == last_idx
         data_time_m.update(time.time() - end)
         if not args.prefetcher:
